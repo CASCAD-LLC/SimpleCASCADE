@@ -696,12 +696,13 @@ public:
     auto modelTab = new QWidget();
     auto modelLayout = new QVBoxLayout(modelTab);
     modelLayout->setContentsMargins(0, 0, 0, 0);
-
-    auto modelPreview = new QLabel("Редактор моделей\n(пока пусто)");
-    modelPreview->setAlignment(Qt::AlignCenter);
-    modelPreview->setStyleSheet("background:#1e1e1e; color:#d0d0d0; font-size:16px;");
-    modelLayout->addWidget(modelPreview);
-
+    auto modelEditor = new ModelEditor();
+    modelLayout->addWidget(modelEditor);
+    connect(modelEditor, &ModelEditor::sendToScene, this, [this](const QString &obj, const QString &name){
+        m_glWidget->addObject(obj.toStdString(), name.toStdString());
+        new QTreeWidgetItem(m_sceneTree->topLevelItem(0), QStringList(name));
+        if (m_console) m_console->append("[MODEL-EDITOR] Вставлен: "+name);
+    });
     m_tabWidget->addTab(modelTab, " 🧱 Редактор моделей ");
 
     layout->addWidget(m_tabWidget);

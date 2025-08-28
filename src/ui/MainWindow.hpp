@@ -19,6 +19,7 @@
 #include <QFormLayout>
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
+#include "ModelEditor.hpp"
 
 struct Vertex { float x, y, z; };
 struct Face { std::vector<int> indices; };
