@@ -1111,6 +1111,7 @@ void MainWindow::onSaveScene() {
         jo["name"] = QString::fromStdString(o.name);
         jo["transform"] = QJsonObject{{"pos", QJsonArray{o.x,o.y,o.z}}, {"rot", QJsonArray{o.rx,o.ry,o.rz}}, {"scl", QJsonArray{o.sx,o.sy,o.sz}}};
         jo["mesh_obj"] = QString::fromStdString(o.toObj());
+        jo["color"] = QJsonArray{o.r, o.g, o.b};
         objects.push_back(jo);
     }
     QJsonObject root{{"objects", objects}};
@@ -1149,6 +1150,8 @@ void MainWindow::onOpenScene() {
             if (pos.size()==3){ o.x=pos[0].toDouble(); o.y=pos[1].toDouble(); o.z=pos[2].toDouble(); }
             if (rot.size()==3){ o.rx=rot[0].toDouble(); o.ry=rot[1].toDouble(); o.rz=rot[2].toDouble(); }
             if (scl.size()==3){ o.sx=scl[0].toDouble(); o.sy=scl[1].toDouble(); o.sz=scl[2].toDouble(); }
+            auto color = jo.value("color").toArray();
+            if (color.size()==3){ o.r=color[0].toDouble(); o.g=color[1].toDouble(); o.b=color[2].toDouble(); }
         }
         auto item = new QTreeWidgetItem(m_sceneTree->topLevelItem(0), QStringList(name));
     }
@@ -1166,6 +1169,13 @@ void MainWindow::onDuplicateSelected() {
     if (!sel) { if (m_console) m_console->append("[DUP] Нет выбранного объекта"); return; }
     QString name = QString::fromStdString(sel->name) + "_copy";
     m_glWidget->addObject(sel->toObj(), name.toStdString());
+    if (!m_glWidget->objects().empty()) {
+        auto &o = *m_glWidget->objects().back();
+        o.x = sel->x; o.y = sel->y; o.z = sel->z;
+        o.rx = sel->rx; o.ry = sel->ry; o.rz = sel->rz;
+        o.sx = sel->sx; o.sy = sel->sy; o.sz = sel->sz;
+        o.r = sel->r; o.g = sel->g; o.b = sel->b;
+    }
     if (m_sceneTree && m_sceneTree->topLevelItemCount() > 0) {
         auto root = m_sceneTree->topLevelItem(0);
         new QTreeWidgetItem(root, QStringList(name));
