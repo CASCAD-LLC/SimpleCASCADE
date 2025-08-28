@@ -14,6 +14,7 @@ set(CMAKE_AUTORCC ON)
 
 # === Директория Python для интеграции ИИ ===
 add_compile_definitions(PYTHON_DIR="${CMAKE_SOURCE_DIR}/python")
+add_compile_definitions(SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 # === Создаём исполняемый файл ===
 add_executable(SimpleCASCADE
@@ -21,6 +22,9 @@ add_executable(SimpleCASCADE
     src/core/Engine3D.cpp
     src/ui/MainWindow.cpp
     src/ui/CodeEditor.cpp
+    src/ui/CodePanel.cpp
+    src/ui/AICompletion.cpp
+    src/ui/ModelEditor.cpp
     src/utils/FileHelper.cpp
     resources.qrc
 )
@@ -48,3 +52,17 @@ add_custom_command(
 
 # === Отладка ===
 message(STATUS "✅ Qt6 найден: Core, Widgets, OpenGL, OpenGLWidgets")
+
+# === Player target (runtime build) ===
+add_executable(Player
+    src/player/PlayerMain.cpp
+)
+
+target_link_libraries(Player
+    Qt6::Core
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+)
+
+target_include_directories(Player PRIVATE src)

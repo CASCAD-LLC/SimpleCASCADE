@@ -18,6 +18,9 @@
 #include <string>
 #include <QFormLayout>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
+#include "ModelEditor.hpp"
+#include "CodePanel.hpp"
 
 struct Vertex { float x, y, z; };
 struct Face { std::vector<int> indices; };
@@ -28,6 +31,7 @@ public:
     float x = 0.0f, y = 0.0f, z = 0.0f;
     float rx = 0.0f, ry = 0.0f, rz = 0.0f;
     float sx = 1.0f, sy = 1.0f, sz = 1.0f;
+    float r = 0.75f, g = 0.8f, b = 1.0f;
     std::vector<Vertex> vertices;
     std::vector<Face> faces;
 
@@ -36,6 +40,15 @@ public:
     void draw();
     void drawForPicking();
     std::string toObj() const;
+    void getAABB(Vertex &minV, Vertex &maxV) const {
+        if (vertices.empty()) { minV = {0,0,0}; maxV = {0,0,0}; return; }
+        minV = {vertices[0].x, vertices[0].y, vertices[0].z};
+        maxV = minV;
+        for (const auto &v : vertices) {
+            if (v.x < minV.x) minV.x = v.x; if (v.y < minV.y) minV.y = v.y; if (v.z < minV.z) minV.z = v.z;
+            if (v.x > maxV.x) maxV.x = v.x; if (v.y > maxV.y) maxV.y = v.y; if (v.z > maxV.z) maxV.z = v.z;
+        }
+    }
 };
 
 class GLWidget : public QOpenGLWidget, protected QOpenGLFunctions {
@@ -55,10 +68,12 @@ public:
     void zoomOut();
     void resetView();
     void frameAll();
+    int currentFPS() const { return m_lastFps; }
 
 signals:
     void objectSelected(const std::string& name);
     void objectMoved(const std::string& name, float x, float y, float z);
+    void fpsUpdated(int fps);
 
 protected:
     void initializeGL() override;
@@ -70,10 +85,14 @@ protected:
     void wheelEvent(QWheelEvent *ev) override;
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
 
 private:
     void setupProjection();
     void selectObject(const QPoint& pos);
+    void drawSelectedBoundingBox();
+    void updateFpsCounter();
 
     float m_camX = 0.0f, m_camY = 0.0f, m_camZ = -5.0f;
     float m_camRotX = 30.0f, m_camRotY = 45.0f;
@@ -86,6 +105,13 @@ private:
     bool m_wireframe = false;
     bool m_ortho = false;
     float m_fovY = 60.0f; // degrees, для перспективы
+
+    enum class MoveAxis { None, X, Y, Z };
+    MoveAxis m_axisConstraint = MoveAxis::None;
+
+    QElapsedTimer m_fpsTimer;
+    int m_frameCount = 0;
+    int m_lastFps = 0;
 
     std::vector<std::unique_ptr<SceneObject>> m_objects;
     SceneObject* m_selectedObject = nullptr;
@@ -105,6 +131,9 @@ private slots:
     void onNewScene();
     void onOpenScene();
     void onSaveScene();
+    void onSaveSession();
+    void onLoadSession();
+    void onBuildGame();
     void onDuplicateSelected();
     void onDeleteSelected();
     void onExportSelectedObj();
@@ -133,6 +162,7 @@ private:
     QDoubleSpinBox *m_posX = nullptr; QDoubleSpinBox *m_posY = nullptr; QDoubleSpinBox *m_posZ = nullptr;
     QDoubleSpinBox *m_rotX = nullptr; QDoubleSpinBox *m_rotY = nullptr; QDoubleSpinBox *m_rotZ = nullptr;
     QDoubleSpinBox *m_sclX = nullptr; QDoubleSpinBox *m_sclY = nullptr; QDoubleSpinBox *m_sclZ = nullptr;
+    QPushButton *m_colorBtn = nullptr;
 };
 
 #endif // MAINWINDOW_HPP
