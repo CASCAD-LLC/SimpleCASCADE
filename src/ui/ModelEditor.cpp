@@ -8,10 +8,14 @@
 #include <QSplitter>
 #include <QLabel>
 #include <QTextStream>
+#include <QMimeData>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <cmath>
 
 MeshEditorViewport::MeshEditorViewport(QWidget *parent) : QOpenGLWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
+    setAcceptDrops(true);
 }
 
 void MeshEditorViewport::setData(std::vector<MEVertex> verts, std::vector<MEFace> faces) {
@@ -86,13 +90,7 @@ void MeshEditorViewport::drawMesh(bool filled) {
 }
 
 int MeshEditorViewport::pickVertex(const QPoint &p) {
-    // naive: project each vertex using current MVP and choose nearest by screen distance
-    // For simplicity, reuse GL immediate transforms (approximate)
-    int best=-1; float bestDist=1e9f;
-    // not implementing full unproject here due to simplicity; use 2D proximity heuristic in view space
-    // This is placeholder selection that works reasonably with small meshes
-    Q_UNUSED(p);
-    return best;
+    Q_UNUSED(p); return -1;
 }
 
 void MeshEditorViewport::paintGL() {
@@ -119,6 +117,25 @@ void MeshEditorViewport::mouseMoveEvent(QMouseEvent *e) {
     m_last = e->position().toPoint(); update();
 }
 void MeshEditorViewport::wheelEvent(QWheelEvent *e) { m_camZ += (e->angleDelta().y()/120.0f)*0.5f; update(); }
+
+void MeshEditorViewport::dragEnterEvent(QDragEnterEvent *event) {
+    if (event->mimeData()->hasText()) {
+        const QString t = event->mimeData()->text();
+        if (t.contains("\nv ") || t.startsWith("v ") || t.contains("\nf ")) { event->acceptProposedAction(); return; }
+    }
+    if (event->mimeData()->hasUrls()) {
+        for (const auto &u : event->mimeData()->urls()) {
+            if (u.toLocalFile().endsWith(".obj", Qt::CaseInsensitive)) { event->acceptProposedAction(); return; }
+        }
+    }
+}
+
+void MeshEditorViewport::dropEvent(QDropEvent *event) {
+    if (event->mimeData()->hasText()) { fromObj(event->mimeData()->text()); return; }
+    if (event->mimeData()->hasUrls()) {
+        for (const auto &u : event->mimeData()->urls()) { QString p=u.toLocalFile(); if (!p.endsWith(".obj", Qt::CaseInsensitive)) continue; QFile f(p); if (f.open(QIODevice::ReadOnly)) { QString t=QString::fromUtf8(f.readAll()); f.close(); fromObj(t); return; } }
+    }
+}
 
 ModelEditor::ModelEditor(QWidget *parent) : QWidget(parent) {
     auto layout = new QVBoxLayout(this);

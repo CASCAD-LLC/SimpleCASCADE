@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QPushButton, QLabel, QFileDialog, QHBoxLayout, QMessageBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QDrag
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from OpenGL.GL import *
 from OpenGL.GLU import gluPerspective
@@ -388,6 +389,9 @@ class AIWindow(QMainWindow):
         self.insert_btn = QPushButton("Добавить в сцену")
         left_layout.addWidget(self.insert_btn)
 
+        self.drag_btn = QPushButton("Перетащить в сцену/редактор")
+        left_layout.addWidget(self.drag_btn)
+
         left_widget = QWidget()
         left_widget.setLayout(left_layout)
         left_widget.setFixedWidth(400)
@@ -402,6 +406,7 @@ class AIWindow(QMainWindow):
         self.mesh_generate_btn.clicked.connect(self.on_generate_mesh)
         self.mesh_save_btn.clicked.connect(self.on_save_mesh)
         self.insert_btn.clicked.connect(self.insert_to_main_scene)
+        self.drag_btn.pressed.connect(self.on_drag_mesh)
         self.mesh_output.textChanged.connect(
             lambda: self.preview_widget.load_obj(self.mesh_output.toPlainText())
         )
@@ -451,6 +456,17 @@ class AIWindow(QMainWindow):
             QMessageBox.information(self, "Готово", "Модель отправлена в сцену")
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось отправить: {e}")
+
+    def on_drag_mesh(self):
+        obj_data = self.mesh_output.toPlainText().strip()
+        if not obj_data:
+            return
+        drag = QDrag(self)
+        mime = self.mesh_output.createMimeDataFromSelection()
+        # Ensure full content is used
+        mime.setText(obj_data)
+        drag.setMimeData(mime)
+        drag.exec(Qt.DropAction.CopyAction)
 
     def create_settings_tab(self):
         tab = QWidget()

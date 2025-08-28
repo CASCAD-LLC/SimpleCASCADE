@@ -424,17 +424,31 @@ void GLWidget::dragEnterEvent(QDragEnterEvent *event) {
             if (u.toLocalFile().endsWith(".obj", Qt::CaseInsensitive)) { event->acceptProposedAction(); return; }
         }
     }
+    if (event->mimeData()->hasText()) {
+        const QString t = event->mimeData()->text();
+        if (t.contains("\nv ") || t.startsWith("v ") || t.contains("\nf ")) {
+            event->acceptProposedAction();
+            return;
+        }
+    }
 }
 
 void GLWidget::dropEvent(QDropEvent *event) {
-    for (const auto &u : event->mimeData()->urls()) {
-        QString p = u.toLocalFile();
-        if (!p.endsWith(".obj", Qt::CaseInsensitive)) continue;
-        QFile f(p);
-        if (f.open(QIODevice::ReadOnly)) {
-            auto data = QString::fromUtf8(f.readAll());
-            auto name = QFileInfo(p).baseName();
-            addObject(data.toStdString(), name.toStdString());
+    if (event->mimeData()->hasUrls()) {
+        for (const auto &u : event->mimeData()->urls()) {
+            QString p = u.toLocalFile();
+            if (!p.endsWith(".obj", Qt::CaseInsensitive)) continue;
+            QFile f(p);
+            if (f.open(QIODevice::ReadOnly)) {
+                auto data = QString::fromUtf8(f.readAll());
+                auto name = QFileInfo(p).baseName();
+                addObject(data.toStdString(), name.toStdString());
+            }
+        }
+    } else if (event->mimeData()->hasText()) {
+        QString data = event->mimeData()->text();
+        if (!data.trimmed().isEmpty()) {
+            addObject(data.toStdString(), "AI_OBJ");
         }
     }
 }
