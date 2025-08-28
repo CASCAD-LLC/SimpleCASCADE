@@ -848,6 +848,16 @@ void MainWindow::setupToolbar() {
         return action;
     };
 
+    auto setIconIfExists = [this](QAction* action, const QString& iconPath) {
+        if (!action) return;
+        if (QFile::exists(iconPath)) {
+            action->setIcon(QIcon(iconPath));
+            if (m_console) m_console->append("✅ Иконка: " + iconPath);
+        } else {
+            if (m_console) m_console->append("❌ Нет иконки: " + iconPath);
+        }
+    };
+
     auto newAction = addAction("Новый", "icons/new.png");
     connect(newAction, &QAction::triggered, this, &MainWindow::onNewScene);
     auto openAction = addAction("Открыть", "icons/open.png");
@@ -866,6 +876,7 @@ void MainWindow::setupToolbar() {
     // Импорт OBJ
     QAction* importObj = new QAction("Импорт OBJ", this);
     m_toolbar->addAction(importObj);
+    setIconIfExists(importObj, "icons/import_obj.png");
     connect(importObj, &QAction::triggered, this, [this]{
         QString p = QFileDialog::getOpenFileName(this, "Импорт OBJ", "", "OBJ Files (*.obj)");
         if (p.isEmpty()) return;
@@ -970,14 +981,17 @@ void MainWindow::setupToolbar() {
     QAction* cubeAct = new QAction("Куб", this);
     m_toolbar->addAction(cubeAct);
     connect(cubeAct, &QAction::triggered, this, [=]{ addPrimitive("Cube", makeCubeObj(1.0f)); });
+    setIconIfExists(cubeAct, "icons/cube.png");
 
     QAction* planeAct = new QAction("Плоскость", this);
     m_toolbar->addAction(planeAct);
     connect(planeAct, &QAction::triggered, this, [=]{ addPrimitive("Plane", makePlaneObj(2.0f, 10)); });
+    setIconIfExists(planeAct, "icons/plane.png");
 
     QAction* sphereAct = new QAction("Сфера", this);
     m_toolbar->addAction(sphereAct);
     connect(sphereAct, &QAction::triggered, this, [=]{ addPrimitive("Sphere", makeSphereObj(0.75f, 12, 18)); });
+    setIconIfExists(sphereAct, "icons/sphere.png");
 
     m_toolbar->addSeparator();
 
@@ -1001,15 +1015,19 @@ void MainWindow::setupToolbar() {
     QAction* zoomInAct = new QAction("Zoom+", this);
     m_toolbar->addAction(zoomInAct);
     connect(zoomInAct, &QAction::triggered, this, [this]{ m_glWidget->zoomIn(); });
+    setIconIfExists(zoomInAct, "icons/zoom_in.png");
     QAction* zoomOutAct = new QAction("Zoom-", this);
     m_toolbar->addAction(zoomOutAct);
     connect(zoomOutAct, &QAction::triggered, this, [this]{ m_glWidget->zoomOut(); });
+    setIconIfExists(zoomOutAct, "icons/zoom_out.png");
     QAction* resetViewAct = new QAction("Reset", this);
     m_toolbar->addAction(resetViewAct);
     connect(resetViewAct, &QAction::triggered, this, [this]{ m_glWidget->resetView(); });
+    setIconIfExists(resetViewAct, "icons/reset_view.png");
     QAction* frameAllAct = new QAction("Frame", this);
     m_toolbar->addAction(frameAllAct);
     connect(frameAllAct, &QAction::triggered, this, [this]{ m_glWidget->frameAll(); });
+    setIconIfExists(frameAllAct, "icons/frame.png");
 
     // Shortcuts
     frameAllAct->setShortcut(QKeySequence(Qt::Key_F));
@@ -1033,19 +1051,23 @@ void MainWindow::setupToolbar() {
     m_toolbar->addAction(duplicateAct);
     connect(duplicateAct, &QAction::triggered, this, &MainWindow::onDuplicateSelected);
     duplicateAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+    setIconIfExists(duplicateAct, "icons/duplicate.png");
 
     QAction* deleteAct = new QAction("Удалить", this);
     m_toolbar->addAction(deleteAct);
     connect(deleteAct, &QAction::triggered, this, &MainWindow::onDeleteSelected);
     deleteAct->setShortcut(QKeySequence::Delete);
+    setIconIfExists(deleteAct, "icons/delete.png");
 
     QAction* exportAct = new QAction("Export", this);
     m_toolbar->addAction(exportAct);
     connect(exportAct, &QAction::triggered, this, &MainWindow::onExportSelectedObj);
+    setIconIfExists(exportAct, "icons/export.png");
 
     QAction* screenshotAct = new QAction("Shot", this);
     m_toolbar->addAction(screenshotAct);
     connect(screenshotAct, &QAction::triggered, this, &MainWindow::onSaveScreenshot);
+    setIconIfExists(screenshotAct, "icons/screenshot.png");
 
     // Переключатели Wireframe/Ortho
     m_toolbar->addSeparator();
@@ -1053,10 +1075,12 @@ void MainWindow::setupToolbar() {
     wireframeAct->setCheckable(true);
     m_toolbar->addAction(wireframeAct);
     connect(wireframeAct, &QAction::toggled, this, [this](bool on){ m_glWidget->setWireframe(on); });
+    setIconIfExists(wireframeAct, "icons/wireframe.png");
     QAction* orthoAct = new QAction("Ortho", this);
     orthoAct->setCheckable(true);
     m_toolbar->addAction(orthoAct);
     connect(orthoAct, &QAction::toggled, this, [this](bool on){ m_glWidget->setOrtho(on); });
+    setIconIfExists(orthoAct, "icons/ortho.png");
 }
 
 void MainWindow::setupStatusBar() {
