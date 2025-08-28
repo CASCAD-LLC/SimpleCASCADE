@@ -44,6 +44,7 @@ class GLWidget : public QOpenGLWidget, protected QOpenGLFunctions {
 public:
     explicit GLWidget(QWidget *parent = nullptr);
     void addObject(const std::string& objData, const std::string& name = "Object");
+    bool removeSelectedObject();
     size_t getObjectCount() const { return m_objects.size(); }
     SceneObject* getSelectedObject() const { return m_selectedObject; }
     void clearObjects() { m_objects.clear(); m_selectedObject = nullptr; update(); }
@@ -104,6 +105,10 @@ private slots:
     void onNewScene();
     void onOpenScene();
     void onSaveScene();
+    void onDuplicateSelected();
+    void onDeleteSelected();
+    void onExportSelectedObj();
+    void onSaveScreenshot();
 
 private:
     void setupUI();

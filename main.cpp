@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
         }
         QToolBar {
             spacing: 0px;
-            padding: 6px;
+            padding: 4px;
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2d2d3d, stop:1 #22222e);
             border-bottom: 1px solid #444;
             margin: 0px;
@@ -37,8 +37,8 @@ int main(int argc, char *argv[]) {
             background: transparent;
             border: 2px solid transparent;
             border-radius: 8px;
-            margin: 4px;
-            padding: 8px;
+            margin: 2px;
+            padding: 4px;
         }
         QToolButton:hover {
             background: rgba(100, 140, 255, 60);
