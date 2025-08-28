@@ -129,6 +129,9 @@ private slots:
     void onNewScene();
     void onOpenScene();
     void onSaveScene();
+    void onSaveSession();
+    void onLoadSession();
+    void onBuildGame();
     void onDuplicateSelected();
     void onDeleteSelected();
     void onExportSelectedObj();

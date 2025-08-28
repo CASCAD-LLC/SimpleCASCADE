@@ -855,6 +855,14 @@ void MainWindow::setupToolbar() {
     auto saveAction = addAction("Сохранить", "icons/save.png");
     connect(saveAction, &QAction::triggered, this, &MainWindow::onSaveScene);
 
+    // Сессия
+    QAction* saveSession = new QAction("Сохранить сессию", this);
+    m_toolbar->addAction(saveSession);
+    connect(saveSession, &QAction::triggered, this, &MainWindow::onSaveSession);
+    QAction* loadSession = new QAction("Загрузить сессию", this);
+    m_toolbar->addAction(loadSession);
+    connect(loadSession, &QAction::triggered, this, &MainWindow::onLoadSession);
+
     // Импорт OBJ
     QAction* importObj = new QAction("Импорт OBJ", this);
     m_toolbar->addAction(importObj);
@@ -981,6 +989,11 @@ void MainWindow::setupToolbar() {
 
     auto stopAction = addAction("Стоп", "icons/stop.png");
     connect(stopAction, &QAction::triggered, this, &MainWindow::onStop);
+
+    // Сборка игры
+    QAction* buildAction = new QAction("Сборка игры", this);
+    m_toolbar->addAction(buildAction);
+    connect(buildAction, &QAction::triggered, this, &MainWindow::onBuildGame);
 
     m_toolbar->addSeparator();
 
@@ -1121,6 +1134,112 @@ void MainWindow::onSaveScene() {
         f.close();
         m_console->append("[SCENE] Сцена сохранена: " + path);
     }
+}
+
+void MainWindow::onSaveSession() {
+    QString path = QFileDialog::getSaveFileName(this, "Сохранить сессию", "", "SimpleCASCADE Session (*.session)");
+    if (path.isEmpty()) return;
+    QJsonObject root;
+    // Scene
+    QJsonArray objects;
+    for (const auto &ptr : m_glWidget->objects()) {
+        const auto &o = *ptr;
+        QJsonObject jo;
+        jo["name"] = QString::fromStdString(o.name);
+        jo["transform"] = QJsonObject{{"pos", QJsonArray{o.x,o.y,o.z}}, {"rot", QJsonArray{o.rx,o.ry,o.rz}}, {"scl", QJsonArray{o.sx,o.sy,o.sz}}};
+        jo["mesh_obj"] = QString::fromStdString(o.toObj());
+        jo["color"] = QJsonArray{o.r, o.g, o.b};
+        objects.push_back(jo);
+    }
+    root["objects"] = objects;
+    // Camera/UI state
+    QJsonObject cam{{"x", m_glWidget->getSelectedObject() ? m_glWidget->getSelectedObject()->x : 0}, {"y", 0}, {"z", 0}}; // placeholder
+    root["ui"] = QJsonObject{
+        {"tab", m_tabWidget->currentIndex()},
+    };
+    // Write
+    QFile f(path);
+    if (f.open(QIODevice::WriteOnly)) { f.write(QJsonDocument(root).toJson()); f.close(); m_console->append("[SESSION] Сохранена: "+path); }
+}
+
+void MainWindow::onLoadSession() {
+    QString path = QFileDialog::getOpenFileName(this, "Загрузить сессию", "", "SimpleCASCADE Session (*.session)");
+    if (path.isEmpty()) return;
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) return;
+    auto doc = QJsonDocument::fromJson(f.readAll()); f.close(); if (!doc.isObject()) return;
+    onNewScene();
+    auto root = doc.object();
+    auto arr = root.value("objects").toArray();
+    for (const auto &it : arr) {
+        auto jo = it.toObject();
+        auto name = jo.value("name").toString("Object");
+        auto mesh = jo.value("mesh_obj").toString();
+        m_glWidget->addObject(mesh.toStdString(), name.toStdString());
+        if (!m_glWidget->objects().empty()) {
+            auto &o = *m_glWidget->objects().back();
+            auto tr = jo.value("transform").toObject();
+            auto pos = tr.value("pos").toArray();
+            auto rot = tr.value("rot").toArray();
+            auto scl = tr.value("scl").toArray();
+            if (pos.size()==3){ o.x=pos[0].toDouble(); o.y=pos[1].toDouble(); o.z=pos[2].toDouble(); }
+            if (rot.size()==3){ o.rx=rot[0].toDouble(); o.ry=rot[1].toDouble(); o.rz=rot[2].toDouble(); }
+            if (scl.size()==3){ o.sx=scl[0].toDouble(); o.sy=scl[1].toDouble(); o.sz=scl[2].toDouble(); }
+            auto color = jo.value("color").toArray();
+            if (color.size()==3){ o.r=color[0].toDouble(); o.g=color[1].toDouble(); o.b=color[2].toDouble(); }
+        }
+        new QTreeWidgetItem(m_sceneTree->topLevelItem(0), QStringList(name));
+    }
+    // UI
+    auto ui = root.value("ui").toObject();
+    int tab = ui.value("tab").toInt(0);
+    m_tabWidget->setCurrentIndex(tab);
+    m_glWidget->update();
+    m_console->append("[SESSION] Загружена: "+path);
+}
+
+void MainWindow::onBuildGame() {
+    // 1) Сохранить сцену во временный файл
+    QString scenePath = QDir::temp().filePath("SimpleCASCADE_build.scene");
+    {
+        QJsonArray objects;
+        for (const auto &ptr : m_glWidget->objects()) {
+            const auto &o = *ptr;
+            QJsonObject jo;
+            jo["name"] = QString::fromStdString(o.name);
+            jo["transform"] = QJsonObject{{"pos", QJsonArray{o.x,o.y,o.z}}, {"rot", QJsonArray{o.rx,o.ry,o.rz}}, {"scl", QJsonArray{o.sx,o.sy,o.sz}}};
+            jo["mesh_obj"] = QString::fromStdString(o.toObj());
+            jo["color"] = QJsonArray{o.r, o.g, o.b};
+            objects.push_back(jo);
+        }
+        QJsonObject root{{"objects", objects}};
+        QFile f(scenePath);
+        if (f.open(QIODevice::WriteOnly)) { f.write(QJsonDocument(root).toJson()); f.close(); }
+    }
+
+    // 2) Сконфигурировать/собрать Player (если Qt установлен)
+    QString buildDir = QDir::temp().filePath("SimpleCASCADE_PlayerBuild");
+    QDir().mkpath(buildDir);
+    QString cmake = "cmake";
+    QString configure = QString("%1 -S \"%2\" -B \"%3\" -DCMAKE_BUILD_TYPE=Release").arg(cmake, QString(SOURCE_DIR), buildDir);
+    QString build = QString("%1 --build \"%2\" --target Player --config Release").arg(cmake, buildDir);
+    auto run = [this](const QString &cmd){ return QProcess::execute("/bin/sh", {"-lc", cmd}); };
+    int ec1 = run(configure);
+    int ec2 = ec1==0 ? run(build) : -1;
+    if (ec1!=0 || ec2!=0) {
+        m_console->append("[BUILD] Ошибка сборки Player. Убедитесь, что Qt6 установлен.");
+        QMessageBox::warning(this, "Build", "Сборка не удалась. Нужен Qt6 SDK в окружении.");
+        return;
+    }
+
+    // 3) Скопировать итог
+    QString exportDir = QFileDialog::getExistingDirectory(this, "Папка вывода игры");
+    if (exportDir.isEmpty()) return;
+    // бинарь и сцена
+    QString playerBin = QDir(buildDir).filePath("Player");
+    QFile::copy(playerBin, QDir(exportDir).filePath("Player"));
+    QFile::copy(scenePath, QDir(exportDir).filePath("game.scene"));
+    m_console->append("[BUILD] Готово. В папке: " + exportDir);
 }
 
 void MainWindow::onOpenScene() {
