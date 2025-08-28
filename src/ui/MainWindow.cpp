@@ -26,6 +26,8 @@
 #include <QDropEvent>
 #include <QUrl>
 #include <QFileInfo>
+#include <QImage>
+#include <QByteArray>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -473,6 +475,19 @@ void GLWidget::selectObject(const QPoint& pos) {
     }
 }
 
+bool GLWidget::removeSelectedObject() {
+    if (!m_selectedObject) return false;
+    for (size_t i = 0; i < m_objects.size(); ++i) {
+        if (m_objects[i].get() == m_selectedObject) {
+            m_objects.erase(m_objects.begin() + static_cast<long>(i));
+            m_selectedObject = nullptr;
+            update();
+            return true;
+        }
+    }
+    return false;
+}
+
 // === Реализация MainWindow ===
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
@@ -684,19 +699,19 @@ void MainWindow::setupToolbar() {
     m_toolbar = new QToolBar("Главное меню", this);
     m_toolbar->setMovable(false);
     m_toolbar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    m_toolbar->setIconSize(QSize(64, 64));
+    m_toolbar->setIconSize(QSize(24, 24));
     m_toolbar->setStyleSheet(R"(
         QToolBar {
             spacing: 0px;
-            padding: 6px;
+            padding: 4px;
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2d2d3d, stop:1 #22222e);
             border-bottom: 1px solid #444;
         }
         QToolButton {
-            width: 72px;
-            height: 72px;
-            margin: 4px;
-            padding: 8px;
+            width: 44px;
+            height: 44px;
+            margin: 2px;
+            padding: 4px;
             border: 2px solid transparent;
             border-radius: 8px;
             background: transparent;
@@ -718,7 +733,7 @@ void MainWindow::setupToolbar() {
             if (m_console) m_console->append("✅ Иконка: " + iconPath);
         } else {
             if (m_console) m_console->append("❌ Нет иконки: " + iconPath);
-            QPixmap px(48, 48);
+            QPixmap px(24, 24);
             px.fill(Qt::white);
             action->setIcon(QIcon(px));
         }
@@ -785,6 +800,24 @@ void MainWindow::setupToolbar() {
     connect(modelAction, &QAction::triggered, [this] {
         m_tabWidget->setCurrentIndex(2);
     });
+
+    // Дополнительно: дублирование/удаление/экспорт/скриншот
+    m_toolbar->addSeparator();
+    QAction* duplicateAct = new QAction("Дубль", this);
+    m_toolbar->addAction(duplicateAct);
+    connect(duplicateAct, &QAction::triggered, this, &MainWindow::onDuplicateSelected);
+
+    QAction* deleteAct = new QAction("Удалить", this);
+    m_toolbar->addAction(deleteAct);
+    connect(deleteAct, &QAction::triggered, this, &MainWindow::onDeleteSelected);
+
+    QAction* exportAct = new QAction("Export", this);
+    m_toolbar->addAction(exportAct);
+    connect(exportAct, &QAction::triggered, this, &MainWindow::onExportSelectedObj);
+
+    QAction* screenshotAct = new QAction("Shot", this);
+    m_toolbar->addAction(screenshotAct);
+    connect(screenshotAct, &QAction::triggered, this, &MainWindow::onSaveScreenshot);
 
     // Переключатели Wireframe/Ortho
     m_toolbar->addSeparator();
@@ -906,6 +939,66 @@ void MainWindow::onOpenScene() {
 void MainWindow::onRun() {
     m_statusLabel->setText("Сцена: Запущена");
     m_console->append("[RUN] Сцена запущена.");
+}
+
+void MainWindow::onDuplicateSelected() {
+    auto sel = m_glWidget->getSelectedObject();
+    if (!sel) { if (m_console) m_console->append("[DUP] Нет выбранного объекта"); return; }
+    QString name = QString::fromStdString(sel->name) + "_copy";
+    m_glWidget->addObject(sel->toObj(), name.toStdString());
+    if (m_sceneTree && m_sceneTree->topLevelItemCount() > 0) {
+        auto root = m_sceneTree->topLevelItem(0);
+        new QTreeWidgetItem(root, QStringList(name));
+    }
+    if (m_console) m_console->append("[DUP] Создан дубль: " + name);
+}
+
+void MainWindow::onDeleteSelected() {
+    auto sel = m_glWidget->getSelectedObject();
+    if (!sel) { if (m_console) m_console->append("[DEL] Нет выбранного объекта"); return; }
+    QString name = QString::fromStdString(sel->name);
+    if (m_glWidget->removeSelectedObject()) {
+        if (m_sceneTree && m_sceneTree->topLevelItemCount() > 0) {
+            auto root = m_sceneTree->topLevelItem(0);
+            for (int i = 0; i < root->childCount(); ++i) {
+                auto child = root->child(i);
+                if (child->text(0) == name && child->text(0) != "Камера" && child->text(0) != "Свет") {
+                    delete root->takeChild(i);
+                    break;
+                }
+            }
+        }
+        if (m_console) m_console->append("[DEL] Удалён: " + name);
+    } else {
+        if (m_console) m_console->append("[DEL] Не удалось удалить: " + name);
+    }
+}
+
+void MainWindow::onExportSelectedObj() {
+    auto sel = m_glWidget->getSelectedObject();
+    if (!sel) { if (m_console) m_console->append("[EXPORT] Нет выбранного объекта"); return; }
+    QString path = QFileDialog::getSaveFileName(this, "Экспорт OBJ", sel->name.empty() ? "object.obj" : QString::fromStdString(sel->name) + ".obj", "OBJ Files (*.obj)");
+    if (path.isEmpty()) return;
+    QFile f(path);
+    if (f.open(QIODevice::WriteOnly)) {
+        QByteArray data = QByteArray::fromStdString(sel->toObj());
+        f.write(data);
+        f.close();
+        if (m_console) m_console->append("[EXPORT] Сохранён OBJ: " + path);
+    }
+}
+
+void MainWindow::onSaveScreenshot() {
+    QString path = QFileDialog::getSaveFileName(this, "Сохранить скриншот", "screenshot.png", "PNG (*.png)");
+    if (path.isEmpty()) return;
+    QImage img = m_glWidget->grabFramebuffer();
+    if (!img.isNull()) {
+        if (img.save(path)) {
+            if (m_console) m_console->append("[SHOT] Скриншот: " + path);
+        } else {
+            if (m_console) m_console->append("[SHOT] Ошибка сохранения: " + path);
+        }
+    }
 }
 
 void MainWindow::onPause() {
