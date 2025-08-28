@@ -691,18 +691,8 @@ void MainWindow::setupUI() {
     auto codeLayout = new QVBoxLayout(codeTab);
     codeLayout->setContentsMargins(0, 0, 0, 0);
 
-    auto editor = new CodeEditor();
-    codeLayout->addWidget(editor);
-    editor->setPlainText(R"(
-#include "MyActor.hpp"
-
-class PlayerController : public Actor {
-public:
-    void Update(float dt) override {
-        Transform.Translate(0, 0, 10 * dt);
-    }
-};
-)");
+    auto codePanel = new CodePanel();
+    codeLayout->addWidget(codePanel);
 
     m_tabWidget->addTab(codeTab, " 💻 Редактор кода ");
 
