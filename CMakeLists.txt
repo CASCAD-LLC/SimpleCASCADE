@@ -23,6 +23,7 @@ add_executable(SimpleCASCADE
     src/ui/MainWindow.cpp
     src/ui/CodeEditor.cpp
     src/ui/CodePanel.cpp
+    src/ui/AICompletion.cpp
     src/ui/ModelEditor.cpp
     src/utils/FileHelper.cpp
     resources.qrc

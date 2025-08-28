@@ -93,6 +93,13 @@ CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent) {
 
     updateLineNumberAreaWidth(0);
     highlightCurrentLine();
+
+    m_completion = new AICompletion(this);
+    connect(m_completion, &AICompletion::suggestionReady, this, &CodeEditor::onSuggestionReady);
+    m_idleTimer.setSingleShot(true);
+    m_idleTimer.setInterval(600);
+    connect(&m_idleTimer, &QTimer::timeout, this, [this]{ triggerCompletion(); });
+    connect(this, &QPlainTextEdit::textChanged, this, [this]{ m_idleTimer.start(); });
 }
 
 void CodeEditor::updateLineNumberAreaWidth(int) {
@@ -133,6 +140,20 @@ void CodeEditor::resizeEvent(QResizeEvent *e) {
     lineNumberArea->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
 }
 
+void CodeEditor::keyPressEvent(QKeyEvent *e) {
+    if (e->key() == Qt::Key_Tab && !m_ghostText.isEmpty()) {
+        acceptSuggestion();
+        e->accept();
+        return;
+    }
+    if (e->key() == Qt::Key_Space && (e->modifiers() & Qt::ControlModifier)) {
+        triggerCompletion();
+        e->accept();
+        return;
+    }
+    QPlainTextEdit::keyPressEvent(e);
+}
+
 void CodeEditor::highlightCurrentLine() {
     QList<QTextEdit::ExtraSelection> extraSelections;
 
@@ -170,4 +191,43 @@ void CodeEditor::lineNumberAreaPaintEvent(QPaintEvent *event) {
         bottom = top + qRound(blockBoundingRect(block).height());
         ++blockNumber;
     }
+}
+
+// Paint inline ghost suggestion overlay
+void CodeEditor::paintEvent(QPaintEvent *e) {
+    QPlainTextEdit::paintEvent(e);
+    if (m_ghostText.isEmpty()) return;
+    QPainter p(viewport());
+    QTextCursor c = textCursor();
+    QRect r = cursorRect(c);
+    p.setPen(QColor(200,200,200,130));
+    p.drawText(r.topLeft() + QPoint(1, fontMetrics().ascent()), m_ghostText);
+}
+
+void CodeEditor::triggerCompletion() {
+    QString lang = "cpp";
+    QString path = "";
+    QTextCursor c = textCursor();
+    int off = c.position();
+    m_completion->request(toPlainText(), off, lang, path);
+}
+
+void CodeEditor::acceptSuggestion() {
+    if (m_ghostText.isEmpty()) return;
+    QTextCursor c = textCursor();
+    c.insertText(m_ghostText);
+    setTextCursor(c);
+    m_ghostText.clear();
+    viewport()->update();
+}
+
+void CodeEditor::clearSuggestion() {
+    if (m_ghostText.isEmpty()) return;
+    m_ghostText.clear();
+    viewport()->update();
+}
+
+void CodeEditor::onSuggestionReady(const QString &text) {
+    m_ghostText = text;
+    viewport()->update();
 }
