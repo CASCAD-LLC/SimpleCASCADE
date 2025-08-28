@@ -28,6 +28,10 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QByteArray>
+#include <QColorDialog>
+#include <QPushButton>
+#include <QShortcut>
+#include <QKeyEvent>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -89,7 +93,7 @@ void SceneObject::draw() {
     glDisable(GL_COLOR_MATERIAL);
     glEnable(GL_LIGHTING);
     glEnable(GL_NORMALIZE);
-    glColor3f(0.75f, 0.8f, 1.0f);
+    glColor3f(r, g, b);
     glBegin(GL_TRIANGLES);
     for (const auto& face : faces) {
         if (face.indices.size() < 3) continue;
@@ -219,6 +223,8 @@ void GLWidget::initializeGL() {
     glLightfv(GL_LIGHT1, GL_POSITION, light1Pos);
     glLightfv(GL_LIGHT1, GL_AMBIENT, lightAmb);
     glLightfv(GL_LIGHT1, GL_DIFFUSE, lightDiff);
+
+    m_fpsTimer.start();
 }
 
 void GLWidget::paintGL() {
@@ -265,6 +271,11 @@ void GLWidget::paintGL() {
     glEnd();
     glEnable(GL_COLOR_MATERIAL);
     glEnable(GL_LIGHTING);
+
+    // Bounding box around selected object
+    drawSelectedBoundingBox();
+
+    updateFpsCounter();
 }
 
 void GLWidget::resizeGL(int w, int h) {
@@ -351,8 +362,16 @@ void GLWidget::mouseMoveEvent(QMouseEvent *ev) {
     }
     else if (m_leftButtonPressed && m_selectedObject) {
         float speed = 0.01f * fabs(m_camZ);
-        m_selectedObject->x += diff.x() * speed;
-        m_selectedObject->y -= diff.y() * speed;
+        if (m_axisConstraint == MoveAxis::X) {
+            m_selectedObject->x += diff.x() * speed;
+        } else if (m_axisConstraint == MoveAxis::Y) {
+            m_selectedObject->y -= diff.y() * speed;
+        } else if (m_axisConstraint == MoveAxis::Z) {
+            m_selectedObject->z -= diff.y() * speed;
+        } else {
+            m_selectedObject->x += diff.x() * speed;
+            m_selectedObject->y -= diff.y() * speed;
+        }
         emit objectMoved(m_selectedObject->name, m_selectedObject->x, m_selectedObject->y, m_selectedObject->z);
         qDebug() << "move object via LMB" << m_selectedObject->x << m_selectedObject->y;
     }
@@ -486,6 +505,72 @@ bool GLWidget::removeSelectedObject() {
         }
     }
     return false;
+}
+
+void GLWidget::keyPressEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_X) m_axisConstraint = MoveAxis::X;
+    else if (event->key() == Qt::Key_Y) m_axisConstraint = MoveAxis::Y;
+    else if (event->key() == Qt::Key_Z) m_axisConstraint = MoveAxis::Z;
+    QOpenGLWidget::keyPressEvent(event);
+}
+
+void GLWidget::keyReleaseEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_X || event->key() == Qt::Key_Y || event->key() == Qt::Key_Z) {
+        m_axisConstraint = MoveAxis::None;
+    }
+    QOpenGLWidget::keyReleaseEvent(event);
+}
+
+void GLWidget::drawSelectedBoundingBox() {
+    if (!m_selectedObject) return;
+    Vertex minV, maxV;
+    m_selectedObject->getAABB(minV, maxV);
+
+    glDisable(GL_LIGHTING);
+    glColor3f(1.0f, 0.9f, 0.2f);
+    glLineWidth(2.0f);
+
+    glPushMatrix();
+    glTranslatef(m_selectedObject->x, m_selectedObject->y, m_selectedObject->z);
+    glRotatef(m_selectedObject->rx, 1.0f, 0.0f, 0.0f);
+    glRotatef(m_selectedObject->ry, 0.0f, 1.0f, 0.0f);
+    glRotatef(m_selectedObject->rz, 0.0f, 0.0f, 1.0f);
+    glScalef(m_selectedObject->sx, m_selectedObject->sy, m_selectedObject->sz);
+
+    float x0 = minV.x, y0 = minV.y, z0 = minV.z;
+    float x1 = maxV.x, y1 = maxV.y, z1 = maxV.z;
+    glBegin(GL_LINES);
+    // bottom rectangle
+    glVertex3f(x0,y0,z0); glVertex3f(x1,y0,z0);
+    glVertex3f(x1,y0,z0); glVertex3f(x1,y0,z1);
+    glVertex3f(x1,y0,z1); glVertex3f(x0,y0,z1);
+    glVertex3f(x0,y0,z1); glVertex3f(x0,y0,z0);
+    // top rectangle
+    glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0);
+    glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1);
+    glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
+    glVertex3f(x0,y1,z1); glVertex3f(x0,y1,z0);
+    // verticals
+    glVertex3f(x0,y0,z0); glVertex3f(x0,y1,z0);
+    glVertex3f(x1,y0,z0); glVertex3f(x1,y1,z0);
+    glVertex3f(x1,y0,z1); glVertex3f(x1,y1,z1);
+    glVertex3f(x0,y0,z1); glVertex3f(x0,y1,z1);
+    glEnd();
+
+    glPopMatrix();
+    glLineWidth(1.0f);
+    glEnable(GL_LIGHTING);
+}
+
+void GLWidget::updateFpsCounter() {
+    ++m_frameCount;
+    qint64 ms = m_fpsTimer.elapsed();
+    if (ms >= 1000) {
+        m_lastFps = static_cast<int>(m_frameCount * 1000.0 / ms);
+        m_frameCount = 0;
+        m_fpsTimer.restart();
+        emit fpsUpdated(m_lastFps);
+    }
 }
 
 // === Реализация MainWindow ===
@@ -652,6 +737,11 @@ QWidget* MainWindow::createInspector() {
     form->addRow("Вращение", rotRow);
     form->addRow("Масштаб", sclRow);
 
+    // Цвет объекта
+    m_colorBtn = new QPushButton("Цвет");
+    m_colorBtn->setMaximumWidth(120);
+    form->addRow("Цвет", m_colorBtn);
+
     // Привязки к выбранному объекту
     auto connectSpin = [this](QDoubleSpinBox* s, auto setter) {
         connect(s, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, setter](double v){
@@ -677,6 +767,18 @@ QWidget* MainWindow::createInspector() {
         bindInspector(m_glWidget->getSelectedObject());
     });
 
+    connect(m_colorBtn, &QPushButton::clicked, this, [this]{
+        auto so = m_glWidget->getSelectedObject();
+        if (!so) return;
+        QColor current = QColor::fromRgbF(so->r, so->g, so->b);
+        QColor c = QColorDialog::getColor(current, this, "Выбор цвета");
+        if (!c.isValid()) return;
+        so->r = static_cast<float>(c.redF());
+        so->g = static_cast<float>(c.greenF());
+        so->b = static_cast<float>(c.blueF());
+        m_glWidget->update();
+    });
+
     return panel;
 }
 
@@ -689,6 +791,11 @@ void MainWindow::bindInspector(SceneObject* o) {
     m_posX->setValue(o->x); m_posY->setValue(o->y); m_posZ->setValue(o->z);
     m_rotX->setValue(o->rx); m_rotY->setValue(o->ry); m_rotZ->setValue(o->rz);
     m_sclX->setValue(o->sx); m_sclY->setValue(o->sy); m_sclZ->setValue(o->sz);
+    QPalette pal = m_colorBtn->palette();
+    pal.setColor(QPalette::Button, QColor::fromRgbF(o->r, o->g, o->b));
+    m_colorBtn->setAutoFillBackground(true);
+    m_colorBtn->setPalette(pal);
+    m_colorBtn->update();
 
     m_posX->blockSignals(false); m_posY->blockSignals(false); m_posZ->blockSignals(false);
     m_rotX->blockSignals(false); m_rotY->blockSignals(false); m_rotZ->blockSignals(false);
@@ -764,6 +871,106 @@ void MainWindow::setupToolbar() {
         }
     });
 
+    // Примитивы: Куб, Сфера, Плоскость
+    auto makeCubeObj = [](float s){
+        float h = s * 0.5f;
+        std::ostringstream out;
+        // 8 вершин
+        out << "v "<<-h<<" "<<-h<<" "<<-h<<"\n";
+        out << "v "<< h<<" "<<-h<<" "<<-h<<"\n";
+        out << "v "<< h<<" "<< h<<" "<<-h<<"\n";
+        out << "v "<<-h<<" "<< h<<" "<<-h<<"\n";
+        out << "v "<<-h<<" "<<-h<<" "<< h<<"\n";
+        out << "v "<< h<<" "<<-h<<" "<< h<<"\n";
+        out << "v "<< h<<" "<< h<<" "<< h<<"\n";
+        out << "v "<<-h<<" "<< h<<" "<< h<<"\n";
+        // 12 треугольников (каждая грань 2 треугольника)
+        int f[12][3] = {
+            {1,2,3},{1,3,4}, // back (-Z)
+            {5,8,7},{5,7,6}, // front (+Z)
+            {1,5,6},{1,6,2}, // bottom (-Y)
+            {4,3,7},{4,7,8}, // top (+Y)
+            {1,4,8},{1,8,5}, // left (-X)
+            {2,6,7},{2,7,3}  // right (+X)
+        };
+        for (auto &tri : f) {
+            out << "f "<<tri[0]<<" "<<tri[1]<<" "<<tri[2]<<"\n";
+        }
+        return out.str();
+    };
+
+    auto makePlaneObj = [](float size, int seg){
+        float half = size * 0.5f;
+        std::ostringstream out;
+        // grid vertices on XZ plane at Y=0
+        for (int z = 0; z <= seg; ++z) {
+            for (int x = 0; x <= seg; ++x) {
+                float fx = -half + size * (float)x / seg;
+                float fz = -half + size * (float)z / seg;
+                out << "v "<< fx <<" 0 "<< fz <<"\n";
+            }
+        }
+        auto idx = [seg](int x, int z){ return z * (seg + 1) + x + 1; };
+        for (int z = 0; z < seg; ++z) {
+            for (int x = 0; x < seg; ++x) {
+                int v0 = idx(x, z);
+                int v1 = idx(x+1, z);
+                int v2 = idx(x+1, z+1);
+                int v3 = idx(x, z+1);
+                out << "f "<< v0 <<" "<< v1 <<" "<< v2 <<"\n";
+                out << "f "<< v0 <<" "<< v2 <<" "<< v3 <<"\n";
+            }
+        }
+        return out.str();
+    };
+
+    auto makeSphereObj = [](float radius, int lat, int lon){
+        std::vector<Vertex> verts;
+        std::ostringstream out;
+        for (int i = 0; i <= lat; ++i) {
+            float v = (float)i / lat;
+            float phi = v * M_PI; // 0..pi
+            for (int j = 0; j <= lon; ++j) {
+                float u = (float)j / lon;
+                float theta = u * 2.0f * M_PI; // 0..2pi
+                float x = radius * std::sin(phi) * std::cos(theta);
+                float y = radius * std::cos(phi);
+                float z = radius * std::sin(phi) * std::sin(theta);
+                out << "v "<< x <<" "<< y <<" "<< z <<"\n";
+            }
+        }
+        auto vidx = [lon](int i, int j){ return i * (lon + 1) + j + 1; };
+        for (int i = 0; i < lat; ++i) {
+            for (int j = 0; j < lon; ++j) {
+                int v0 = vidx(i, j);
+                int v1 = vidx(i, j+1);
+                int v2 = vidx(i+1, j+1);
+                int v3 = vidx(i+1, j);
+                out << "f "<< v0 <<" "<< v1 <<" "<< v2 <<"\n";
+                out << "f "<< v0 <<" "<< v2 <<" "<< v3 <<"\n";
+            }
+        }
+        return out.str();
+    };
+
+    auto addPrimitive = [this](const QString &name, const std::string &obj){
+        m_glWidget->addObject(obj, name.toStdString());
+        new QTreeWidgetItem(m_sceneTree->topLevelItem(0), QStringList(name));
+        if (m_console) m_console->append("[PRIM] Добавлен: " + name);
+    };
+
+    QAction* cubeAct = new QAction("Куб", this);
+    m_toolbar->addAction(cubeAct);
+    connect(cubeAct, &QAction::triggered, this, [=]{ addPrimitive("Cube", makeCubeObj(1.0f)); });
+
+    QAction* planeAct = new QAction("Плоскость", this);
+    m_toolbar->addAction(planeAct);
+    connect(planeAct, &QAction::triggered, this, [=]{ addPrimitive("Plane", makePlaneObj(2.0f, 10)); });
+
+    QAction* sphereAct = new QAction("Сфера", this);
+    m_toolbar->addAction(sphereAct);
+    connect(sphereAct, &QAction::triggered, this, [=]{ addPrimitive("Sphere", makeSphereObj(0.75f, 12, 18)); });
+
     m_toolbar->addSeparator();
 
     auto playAction = addAction("Запуск", "icons/play.png");
@@ -791,6 +998,12 @@ void MainWindow::setupToolbar() {
     m_toolbar->addAction(frameAllAct);
     connect(frameAllAct, &QAction::triggered, this, [this]{ m_glWidget->frameAll(); });
 
+    // Shortcuts
+    frameAllAct->setShortcut(QKeySequence(Qt::Key_F));
+    // 'A' to frame as well
+    auto frameShortcut = new QShortcut(QKeySequence(Qt::Key_A), this);
+    connect(frameShortcut, &QShortcut::activated, this, [this]{ m_glWidget->frameAll(); });
+
     auto aiAction = addAction("ИИ", "icons/ai.png");
     connect(aiAction, &QAction::triggered, [this] {
         QProcess::startDetached("python3", {QString::fromStdString(std::string(PYTHON_DIR) + "/ai_agent.py")});
@@ -806,10 +1019,12 @@ void MainWindow::setupToolbar() {
     QAction* duplicateAct = new QAction("Дубль", this);
     m_toolbar->addAction(duplicateAct);
     connect(duplicateAct, &QAction::triggered, this, &MainWindow::onDuplicateSelected);
+    duplicateAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
 
     QAction* deleteAct = new QAction("Удалить", this);
     m_toolbar->addAction(deleteAct);
     connect(deleteAct, &QAction::triggered, this, &MainWindow::onDeleteSelected);
+    deleteAct->setShortcut(QKeySequence::Delete);
 
     QAction* exportAct = new QAction("Export", this);
     m_toolbar->addAction(exportAct);
@@ -837,6 +1052,11 @@ void MainWindow::setupStatusBar() {
     m_statusBar->addPermanentWidget(m_statusLabel);
     m_statusBar->showMessage("Загрузка завершена", 3000);
     setStatusBar(m_statusBar);
+
+    // FPS label
+    auto fpsLabel = new QLabel("FPS: --");
+    m_statusBar->addPermanentWidget(fpsLabel);
+    connect(m_glWidget, &GLWidget::fpsUpdated, this, [fpsLabel](int fps){ fpsLabel->setText(QString("FPS: %1").arg(fps)); });
 }
 
 static QString saveSceneDialog(QWidget* parent) {

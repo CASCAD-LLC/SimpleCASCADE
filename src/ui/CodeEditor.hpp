@@ -3,6 +3,9 @@
 #include <QPlainTextEdit>
 #include <QSyntaxHighlighter>
 #include <QRegularExpression>
+#include <QWidget>
+#include <QPaintEvent>
+#include <QSize>
 
 class Highlighter : public QSyntaxHighlighter {
     Q_OBJECT
@@ -47,5 +50,16 @@ private slots:
     void updateLineNumberArea(const QRect &, int);
 
 private:
-    QWidget *lineNumberArea = nullptr;
+    class LineNumberArea : public QWidget {
+    public:
+        explicit LineNumberArea(CodeEditor *editor) : QWidget(editor), m_editor(editor) {}
+        QSize sizeHint() const override { return QSize(m_editor->lineNumberAreaWidth(), 0); }
+    protected:
+        void paintEvent(QPaintEvent *event) override { m_editor->lineNumberAreaPaintEvent(event); }
+    private:
+        CodeEditor *m_editor;
+    };
+
+    LineNumberArea *lineNumberArea = nullptr;
+    Highlighter *m_highlighter = nullptr;
 };

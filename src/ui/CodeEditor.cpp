@@ -84,10 +84,12 @@ void Highlighter::highlightBlock(const QString &text) {
 // === Реализация CodeEditor ===
 
 CodeEditor::CodeEditor(QWidget *parent) : QPlainTextEdit(parent) {
-    lineNumberArea = new QWidget(this);
+    lineNumberArea = new LineNumberArea(this);
     connect(this, &CodeEditor::blockCountChanged, this, &CodeEditor::updateLineNumberAreaWidth);
     connect(this, &CodeEditor::updateRequest, this, &CodeEditor::updateLineNumberArea);
     connect(this, &CodeEditor::cursorPositionChanged, this, &CodeEditor::highlightCurrentLine);
+
+    m_highlighter = new Highlighter(document());
 
     updateLineNumberAreaWidth(0);
     highlightCurrentLine();
